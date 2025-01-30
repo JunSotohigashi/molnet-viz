@@ -1,0 +1,74 @@
+[
+    {
+        "elements": [
+            "H",
+            "C"
+        ],
+        "length": 1.08,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "C",
+            "C"
+        ],
+        "length": 1.54,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "C",
+            "C"
+        ],
+        "length": 1.34,
+        "bond_order": 2
+    },
+    {
+        "elements": [
+            "C",
+            "C"
+        ],
+        "length": 1.20,
+        "bond_order": 3
+    },
+    {
+        "elements": [
+            "C",
+            "N"
+        ],
+        "length": 1.47,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "C",
+            "N"
+        ],
+        "length": 1.30,
+        "bond_order": 2
+    },
+    {
+        "elements": [
+            "C",
+            "N"
+        ],
+        "length": 1.16,
+        "bond_order": 3
+    },
+    {
+        "elements": [
+            "H",
+            "N"
+        ],
+        "length": 1.01,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "H",
+            "H"
+        ],
+        "length": 1.07,
+        "bond_order": 1
+    }
+]
