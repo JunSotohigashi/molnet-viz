@@ -17,12 +17,12 @@ import rdkit.Chem.rdmolfiles
 import rdkit.Chem.rdchem
 
 # 読み込むファイルのパス
-EQ_PATH = "manu_EQ_list.log"
-TS_PATH = "manu_TS_list.log"
-BOND_DB_PATH = "bond_length_database.json"
+EQ_PATH = "./data/manu_EQ_list.log"
+TS_PATH = "./data/manu_TS_list.log"
+BOND_DB_PATH = "./data/bond_length_database.json"
 # 保存先のパス
-SAVE_CSV_PATH = "manu.csv"
-SAVE_GRAPH_PATH = "manu.html"
+SAVE_CSV_PATH = "./out/manu.csv"
+SAVE_GRAPH_PATH = "./out/manu.html"
 
 # データベースの結合長に対して、何倍まで許容するか
 BOND_TOLERANCE = 1.1
@@ -208,7 +208,7 @@ if __name__ == "__main__":
         mappable=matplotlib.cm.ScalarMappable(color_norm, color_map),
         ax=ax,
         orientation="vertical").set_label("energy")
-    plt.savefig("./colorbar.svg", format="svg", bbox_inches="tight")
+    plt.savefig("./out/colorbar.svg", format="svg", bbox_inches="tight")
     G.add_node("colorbar", shape="image", image="./colorbar.svg", size=120, label="")
 
     # 指定した色・形状でノードとエッジを追加
