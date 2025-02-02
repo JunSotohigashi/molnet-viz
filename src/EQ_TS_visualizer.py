@@ -2,6 +2,9 @@
 EQ,TS 可視化プログラム
 """
 
+import os
+from datetime import datetime
+
 import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.cm
@@ -16,9 +19,37 @@ from EQ_TS_loader import load, convert_to_df
 EQ_PATH = "./data/manu_EQ_list.log"
 TS_PATH = "./data/manu_TS_list.log"
 # 保存先のパス
-SAVE_CSV_PATH = "./out/manu.csv"
-SAVE_GRAPH_PATH = "./out/manu.html"
+SAVE_DIR = f"./out/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+# TSを表示するかどうか
 SHOW_TS = False
+
+
+class ColorMapper:
+    def __init__(self, target_data: list):
+        self.color_map = plt.get_cmap("turbo")
+        self.color_norm = matplotlib.colors.Normalize(
+            vmin=min(target_data), vmax=max(target_data)
+        )
+
+    def get_color(self, value: float) -> str:
+        return matplotlib.colors.rgb2hex(
+            self.color_map(self.color_norm(value))
+        )
+
+    def save_colorbar(self, save_path: str, label: str = ""):
+        fig, ax = plt.subplots(figsize=(1, 5))
+        matplotlib.colorbar.Colorbar(
+            mappable=matplotlib.cm.ScalarMappable(
+                self.color_norm, self.color_map
+            ),
+            ax=ax,
+            orientation="vertical",
+        ).set_label(label)
+        fig.savefig(
+            save_path,
+            format="svg",
+            bbox_inches="tight",
+        )
 
 
 def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
@@ -27,7 +58,7 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
     # クラスタリング（smiles ごとにノードをグループ化）
     clusters = {}
     for node in G.nodes:
-        smiles = G.nodes[node].get("smiles", "unknown")
+        smiles = G.nodes[node]["smiles"]
         clusters.setdefault(smiles, []).append(node)
 
     # クラスタごとに円形レイアウトを適用
@@ -36,7 +67,10 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
 
     for smiles, cluster_nodes in clusters.items():
         subgraph = G.subgraph(cluster_nodes)
-        circular_pos = nx.circular_layout(subgraph, scale=50)  # 円形配置
+        circular_pos = nx.circular_layout(
+            subgraph,
+            scale=(len(cluster_nodes) - 1) ** 0.5 * 40.0,
+        )
 
         # クラスタの仮の中心座標（後でspring_layoutで調整）
         cluster_positions[smiles] = (0, 0)
@@ -46,11 +80,11 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
 
     # クラスタ同士を配置するためのspring_layoutを適用
     cluster_graph = nx.Graph()
-    for smiles in clusters.keys():
+    for smiles, nodes in clusters.items():
         cluster_graph.add_node(smiles)
 
     cluster_pos = nx.spring_layout(
-        cluster_graph, scale=1000
+        cluster_graph, scale=1500, seed=42
     )  # クラスタ全体を適度に分散
 
     # 各クラスタの中心座標を設定
@@ -76,39 +110,26 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
 
 
 if __name__ == "__main__":
+    # 保存先のディレクトリを作成
+    os.makedirs(SAVE_DIR, exist_ok=True)
+
     # ファイルの読み込み
     eq_list, ts_list = load(EQ_PATH, TS_PATH)
 
     # カラーマップを作製
-    color_map = plt.get_cmap("turbo")
-    color_norm = matplotlib.colors.Normalize(
-        vmin=min(
-            min([eq.energy for eq in eq_list]),
-            min([ts.energy for ts in ts_list]),
-        ),
-        vmax=max(
-            max([eq.energy for eq in eq_list]),
-            max([ts.energy for ts in ts_list]),
-        ),
+    color_map = ColorMapper(
+        [eq.energy for eq in eq_list] + [ts.energy for ts in ts_list]
     )
-    fig, ax = plt.subplots(figsize=(1, 5))
-    matplotlib.colorbar.Colorbar(
-        mappable=matplotlib.cm.ScalarMappable(color_norm, color_map),
-        ax=ax,
-        orientation="vertical",
-    ).set_label("energy")
-    plt.savefig("./out/colorbar.svg", format="svg", bbox_inches="tight")
+    color_map.save_colorbar(SAVE_DIR + "/colorbar.svg", "Energy")
 
     # グラフの構築
-    print("Visualizing...")
     G = nx.Graph()
     # 指定した色・形状でノードとエッジを追加
     for eq in eq_list:
-        pass
         G.add_node(
             eq.name,
             shape="square",
-            color=matplotlib.colors.rgb2hex(color_map(color_norm(eq.energy))),
+            color=color_map.get_color(eq.energy),
             size=20,
             font="25px arial black",
             smiles=eq.smiles,
@@ -119,9 +140,7 @@ if __name__ == "__main__":
             # TSをノードとして追加
             G.add_node(
                 ts.name,
-                color=matplotlib.colors.rgb2hex(
-                    color_map(color_norm(ts.energy))
-                ),
+                color=color_map.get_color(ts.energy),
                 size=20,
                 font="25px arial black",
                 smiles=ts.smiles,
@@ -143,7 +162,11 @@ if __name__ == "__main__":
 
     # すべてのノードの配置が完了後、カラーマップをグラフに追加
     G.add_node(
-        "colorbar", shape="image", image="./colorbar.svg", size=120, label=""
+        "colorbar",
+        shape="image",
+        image="./colorbar.svg",
+        size=120,
+        label=" ",
     )
 
     # グラフの可視化
@@ -156,7 +179,7 @@ if __name__ == "__main__":
         """
         var options = {
             "configure": {
-                "enabled": true,
+                "enabled": false,
                 "filter": true
             },
             "edges": {
@@ -173,11 +196,10 @@ if __name__ == "__main__":
         }
         """
     )
-    visG.show(SAVE_GRAPH_PATH, notebook=False)
+    visG.show(SAVE_DIR + "/out.html", notebook=False)
 
     # CSVとして保存
     eq_df, ts_df = convert_to_df(eq_list, ts_list)
-    pd.concat([eq_df, ts_df], ignore_index=True).to_csv(SAVE_CSV_PATH)
-    print(f"CSV file has saved to {SAVE_CSV_PATH}")
+    pd.concat([eq_df, ts_df], ignore_index=True).to_csv(SAVE_DIR + "/out.csv")
 
-    print("Finished!")
+    print("Done!")
