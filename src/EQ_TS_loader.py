@@ -1,5 +1,6 @@
 import json
 
+import pandas as pd
 import rdkit.Chem
 import rdkit.Chem.rdmolfiles
 import rdkit.Chem.rdchem
@@ -52,13 +53,15 @@ class EQ:
         ):
             self.eigenvalues.append(float(block_split[i]))
         # 結合を推測する
-        self.determine_bonds()
+        self._determine_bonds()
+        # SMILESを取得
+        self.smiles = rdkit.Chem.MolToSmiles(self.mol)
 
-    def determine_bonds(self) -> None:
+    def _determine_bonds(self) -> None:
         """
         原子間の距離から結合を推定する
         """
-        bond_db = None
+        bond_db: list[dict] = None
         with open(BOND_DB_PATH) as f:
             bond_db = json.load(f)
         bond_db.sort(key=lambda x: x["length"])
@@ -77,11 +80,6 @@ class EQ:
                         and distance_matrix[x, y]
                         <= bond["length"] * BOND_TOLERANCE
                     ):
-                        # print(
-                        #     pair,
-                        #     distance_matrix[x, y],
-                        #     distance_matrix[x, y] / bond["length"],
-                        # )
                         if bond["bond_order"] == 1:
                             self.mol.AddBond(x, y, rdkit.Chem.BondType.SINGLE)
                         elif bond["bond_order"] == 2:
@@ -89,12 +87,6 @@ class EQ:
                         elif bond["bond_order"] == 3:
                             self.mol.AddBond(x, y, rdkit.Chem.BondType.TRIPLE)
                         break
-
-    def get_smiles(self) -> str:
-        """
-        分子構造をSMILES記法で出力する
-        """
-        return rdkit.Chem.MolToSmiles(self.mol)
 
     def __str__(self) -> str:
         return self.name
@@ -104,8 +96,8 @@ class TS(EQ):
     def __init__(self, ts_block_str: str, eq_list: list) -> None:
         super().__init__(ts_block_str)
         block_split = ts_block_str.split()
-        self.con_from = None
-        self.con_to = None
+        self.con_from: EQ = None
+        self.con_to: EQ = None
         con_from_name = block_split[block_split.index("CONNECTION") + 2]
         con_to_name = block_split[block_split.index("CONNECTION") + 4]
         eq_name_list = [eq.name for eq in eq_list]
@@ -120,21 +112,17 @@ class TS(EQ):
         return False
 
 
-def load(eq_path: str, ts_path: str):
+def load(eq_path: str, ts_path: str) -> tuple[list[EQ], list[TS]]:
     # ファイルの読み込み
     eq_list = []
     ts_list = []
-    print(f"Loading {eq_path} ...")
     with open(eq_path, mode="r") as f:
         eq_blocks = f.read().split("\n\n")[1:]
         eq_list = [EQ(eq_block) for eq_block in eq_blocks]
-    print(f"Loading {ts_path} ...")
     with open(ts_path, mode="r") as f:
         ts_blocks = f.read().split("\n\n")[1:]
         ts_list = [TS(ts_block, eq_list) for ts_block in ts_blocks]
-    print("Loading complete!")
 
-    print("Deleting DC...")
     # DCが含まれるTSを削除
     ts_list = [
         ts
@@ -145,5 +133,28 @@ def load(eq_path: str, ts_path: str):
     eq_list = list(
         set([ts.con_from for ts in ts_list] + [ts.con_to for ts in ts_list])
     )
-
     return eq_list, ts_list
+
+
+def convert_to_df(
+    eq_list: list[EQ], ts_list: list[TS]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    eq_df = pd.DataFrame(
+        {
+            "name": [eq.name for eq in eq_list],
+            "energy": [eq.energy for eq in eq_list],
+            "smiles": [eq.smiles for eq in eq_list],
+        }
+    )
+    ts_df = pd.DataFrame(
+        {
+            "name": [ts.name for ts in ts_list],
+            "energy": [ts.energy for ts in ts_list],
+            "smiles": [ts.smiles for ts in ts_list],
+            "from_EQ": [ts.con_from.name for ts in ts_list],
+            "from_EQ_smiles": [ts.con_from.smiles for ts in ts_list],
+            "to_EQ": [ts.con_to.name for ts in ts_list],
+            "to_EQ_smiles": [ts.con_to.smiles for ts in ts_list],
+        }
+    )
+    return eq_df, ts_df
