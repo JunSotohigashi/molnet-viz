@@ -21,7 +21,7 @@ TS_PATH = "./data/manu_TS_list.log"
 # 保存先のパス
 SAVE_DIR = f"./out/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 # TSを表示するかどうか
-SHOW_TS = True
+SHOW_TS = False
 
 
 class ColorMapper:
