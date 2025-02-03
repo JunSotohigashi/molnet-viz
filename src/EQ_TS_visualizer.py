@@ -21,7 +21,7 @@ TS_PATH = "./data/manu_TS_list.log"
 # 保存先のパス
 SAVE_DIR = f"./out/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 # TSを表示するかどうか
-SHOW_TS = False
+SHOW_TS = True
 
 
 class ColorMapper:
@@ -32,16 +32,12 @@ class ColorMapper:
         )
 
     def get_color(self, value: float) -> str:
-        return matplotlib.colors.rgb2hex(
-            self.color_map(self.color_norm(value))
-        )
+        return matplotlib.colors.rgb2hex(self.color_map(self.color_norm(value)))
 
     def save_colorbar(self, save_path: str, label: str = ""):
         fig, ax = plt.subplots(figsize=(1, 5))
         matplotlib.colorbar.Colorbar(
-            mappable=matplotlib.cm.ScalarMappable(
-                self.color_norm, self.color_map
-            ),
+            mappable=matplotlib.cm.ScalarMappable(self.color_norm, self.color_map),
             ax=ax,
             orientation="vertical",
         ).set_label(label)
@@ -59,17 +55,23 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
     clusters = {}
     for node in G.nodes:
         smiles = G.nodes[node]["smiles"]
-        clusters.setdefault(smiles, []).append(node)
+        if smiles not in clusters:
+            clusters[smiles] = {
+                "nodes": [node],
+                "atoms": G.nodes[node]["atoms"],
+            }
+        else:
+            clusters[smiles]["nodes"].append(node)
 
     # クラスタごとに円形レイアウトを適用
     layout = {}
     cluster_positions = {}
 
-    for smiles, cluster_nodes in clusters.items():
-        subgraph = G.subgraph(cluster_nodes)
+    for smiles, cluster in clusters.items():
+        subgraph = G.subgraph(cluster["nodes"])
         circular_pos = nx.circular_layout(
             subgraph,
-            scale=(len(cluster_nodes) - 1) ** 0.5 * 40.0,
+            scale=(len(cluster["nodes"]) - 1) ** 0.5 * 40.0,
         )
 
         # クラスタの仮の中心座標（後でspring_layoutで調整）
@@ -80,11 +82,18 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
 
     # クラスタ同士を配置するためのspring_layoutを適用
     cluster_graph = nx.Graph()
-    for smiles, nodes in clusters.items():
+    for smiles, cluster in clusters.items():
         cluster_graph.add_node(smiles)
+        # 同じ原子数のクラスタ同士をエッジで結ぶ
+        for other_smiles, other_cluster in clusters.items():
+            if smiles != other_smiles and cluster["atoms"] == other_cluster["atoms"]:
+                cluster_graph.add_edge(smiles, other_smiles, weight=300.0)
+            elif smiles != other_smiles:
+                cluster_graph.add_edge(smiles, other_smiles, weight=0.1)
 
-    cluster_pos = nx.spring_layout(
-        cluster_graph, scale=1500, seed=42
+    cluster_pos = nx.kamada_kawai_layout(
+        cluster_graph,
+        scale=(cluster_graph.number_of_nodes() - 1) ** 0.5 * 150.0,
     )  # クラスタ全体を適度に分散
 
     # 各クラスタの中心座標を設定
@@ -92,19 +101,16 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
         cluster_positions[smiles] = (cx, cy)
 
     # 各ノードの座標を調整
-    for smiles, cluster_nodes in clusters.items():
+    for smiles, cluster in clusters.items():
         cx, cy = cluster_positions[smiles]  # クラスタ中心
-        for node in cluster_nodes:
+        for node in cluster["nodes"]:
             x, y = layout[node]  # 円形内の位置
             layout[node] = (cx + x, cy + y)  # 全体の位置に調整
 
     # networkx のグラフに座標を設定
     nx.set_node_attributes(
         G,
-        {
-            node: {"x": layout[node][0], "y": layout[node][1]}
-            for node in G.nodes()
-        },
+        {node: {"x": layout[node][0], "y": layout[node][1]} for node in G.nodes()},
     )
     return G
 
@@ -130,10 +136,11 @@ if __name__ == "__main__":
             eq.name,
             shape="square",
             color=color_map.get_color(eq.energy),
-            size=20,
+            size=16,
             font="25px arial black",
+            title=f"{eq.name}\n{eq.energy}\n{eq.smiles}\n{str(eq.atoms_in_fragments)}",
             smiles=eq.smiles,
-            title=f"{eq.name}\n{eq.smiles}",
+            atoms=eq.atoms_in_fragments,
         )
     if SHOW_TS:
         for ts in ts_list:
@@ -141,10 +148,11 @@ if __name__ == "__main__":
             G.add_node(
                 ts.name,
                 color=color_map.get_color(ts.energy),
-                size=20,
+                size=16,
                 font="25px arial black",
+                title=f"{ts.name}\n{ts.energy}\n{ts.smiles}\n{str(ts.atoms_in_fragments)}",
                 smiles=ts.smiles,
-                title=f"{eq.name}\n{eq.smiles}",
+                atoms=ts.atoms_in_fragments,
             )
             # EQからTSへのエッジ
             G.add_edge(ts.con_from.name, ts.name, color="black")
@@ -167,6 +175,8 @@ if __name__ == "__main__":
         image="./colorbar.svg",
         size=120,
         label=" ",
+        x=1300,
+        y=0,
     )
 
     # グラフの可視化

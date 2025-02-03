@@ -1,3 +1,4 @@
+from collections import Counter
 import json
 
 import pandas as pd
@@ -56,6 +57,10 @@ class EQ:
         self._determine_bonds()
         # SMILESを取得
         self.smiles = rdkit.Chem.MolToSmiles(self.mol)
+
+        # 結合がある分子ごとに分けて，各原子の数をカウント
+        fragments = rdkit.Chem.GetMolFrags(self.mol, asMols=True, sanitizeFrags=False)
+        self.atoms_in_fragments = [dict(Counter([atom.GetSymbol() for atom in fragment.GetAtoms()])) for fragment in fragments]
 
     def _determine_bonds(self) -> None:
         """
