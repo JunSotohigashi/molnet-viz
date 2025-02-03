@@ -70,5 +70,29 @@
         ],
         "length": 1.07,
         "bond_order": 1
+    },
+    { 
+        "elements": [
+            "O",
+            "H"
+        ],
+        "length": 0.95,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "O",
+            "C"
+        ],
+        "length": 1.43,
+        "bond_order": 1
+    },
+    {
+        "elements": [
+            "O",
+            "C"
+        ],
+        "length": 1.21,
+        "bond_order": 2
     }
 ]
