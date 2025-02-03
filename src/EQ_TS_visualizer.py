@@ -22,6 +22,8 @@ TS_PATH = "./data/manu_TS_list.log"
 SAVE_DIR = f"./out/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 # TSを表示するかどうか
 SHOW_TS = False
+# クラスタのラベルを表示するかどうか
+SHOW_CLUSTER_LABEL = True
 
 
 class ColorMapper:
@@ -32,12 +34,16 @@ class ColorMapper:
         )
 
     def get_color(self, value: float) -> str:
-        return matplotlib.colors.rgb2hex(self.color_map(self.color_norm(value)))
+        return matplotlib.colors.rgb2hex(
+            self.color_map(self.color_norm(value))
+        )
 
     def save_colorbar(self, save_path: str, label: str = ""):
         fig, ax = plt.subplots(figsize=(1, 5))
         matplotlib.colorbar.Colorbar(
-            mappable=matplotlib.cm.ScalarMappable(self.color_norm, self.color_map),
+            mappable=matplotlib.cm.ScalarMappable(
+                self.color_norm, self.color_map
+            ),
             ax=ax,
             orientation="vertical",
         ).set_label(label)
@@ -50,7 +56,6 @@ class ColorMapper:
 
 def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
     """networkx のグラフ G を、smiles ごとにクラスタ化してレイアウトを適用する"""
-
     # クラスタリング（smiles ごとにノードをグループ化）
     clusters = {}
     for node in G.nodes:
@@ -66,17 +71,14 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
     # クラスタごとに円形レイアウトを適用
     layout = {}
     cluster_positions = {}
-
     for smiles, cluster in clusters.items():
         subgraph = G.subgraph(cluster["nodes"])
         circular_pos = nx.circular_layout(
             subgraph,
-            scale=(len(cluster["nodes"]) - 1) ** 0.5 * 40.0,
+            scale=(len(cluster["nodes"]) - 1) ** 0.5 * 35.0,
         )
-
         # クラスタの仮の中心座標（後でspring_layoutで調整）
         cluster_positions[smiles] = (0, 0)
-
         for node, (x, y) in circular_pos.items():
             layout[node] = (x, y)
 
@@ -86,16 +88,17 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
         cluster_graph.add_node(smiles)
         # 同じ原子数のクラスタ同士をエッジで結ぶ
         for other_smiles, other_cluster in clusters.items():
-            if smiles != other_smiles and cluster["atoms"] == other_cluster["atoms"]:
-                cluster_graph.add_edge(smiles, other_smiles, weight=300.0)
-            elif smiles != other_smiles:
-                cluster_graph.add_edge(smiles, other_smiles, weight=0.1)
-
+            if smiles == other_smiles:
+                continue
+            elif cluster["atoms"] == other_cluster["atoms"]:
+                cluster_graph.add_edge(smiles, other_smiles, weight=5.0)
+            else:
+                cluster_graph.add_edge(smiles, other_smiles, weight=1e-8)
+    # クラスタ全体を適度に分散
     cluster_pos = nx.kamada_kawai_layout(
         cluster_graph,
         scale=(cluster_graph.number_of_nodes() - 1) ** 0.5 * 150.0,
-    )  # クラスタ全体を適度に分散
-
+    )
     # 各クラスタの中心座標を設定
     for smiles, (cx, cy) in cluster_pos.items():
         cluster_positions[smiles] = (cx, cy)
@@ -110,8 +113,24 @@ def arrange_nodes_by_smiles(G: nx.Graph) -> nx.Graph:
     # networkx のグラフに座標を設定
     nx.set_node_attributes(
         G,
-        {node: {"x": layout[node][0], "y": layout[node][1]} for node in G.nodes()},
+        {
+            node: {"x": layout[node][0], "y": layout[node][1]}
+            for node in G.nodes()
+        },
     )
+
+    # クラスタのラベルを表示
+    if SHOW_CLUSTER_LABEL:
+        for smiles, (cx, cy) in cluster_positions.items():
+            G.add_node(
+                f"label_{smiles}",
+                shape="text",
+                label=f"{smiles}\n{clusters[smiles]['atoms']}",
+                size=20,
+                font="16px arial grey",
+                x=cx,
+                y=cy,  # ラベルをクラスタの中心の少し上に配置
+            )
     return G
 
 
@@ -138,7 +157,10 @@ if __name__ == "__main__":
             color=color_map.get_color(eq.energy),
             size=16,
             font="25px arial black",
-            title=f"{eq.name}\n{eq.energy}\n{eq.smiles}\n{str(eq.atoms_in_fragments)}",
+            title=f"{eq.name}\n"
+            + f"{eq.energy}\n"
+            + f"{eq.smiles}\n"
+            + f"{str(eq.atoms_in_fragments)}",
             smiles=eq.smiles,
             atoms=eq.atoms_in_fragments,
         )
@@ -150,7 +172,10 @@ if __name__ == "__main__":
                 color=color_map.get_color(ts.energy),
                 size=16,
                 font="25px arial black",
-                title=f"{ts.name}\n{ts.energy}\n{ts.smiles}\n{str(ts.atoms_in_fragments)}",
+                title=f"{ts.name}\n"
+                + f"{ts.energy}\n"
+                + f"{ts.smiles}\n"
+                + f"{str(ts.atoms_in_fragments)}",
                 smiles=ts.smiles,
                 atoms=ts.atoms_in_fragments,
             )
@@ -173,7 +198,7 @@ if __name__ == "__main__":
         "colorbar",
         shape="image",
         image="./colorbar.svg",
-        size=120,
+        size=140,
         label=" ",
         x=1300,
         y=0,
